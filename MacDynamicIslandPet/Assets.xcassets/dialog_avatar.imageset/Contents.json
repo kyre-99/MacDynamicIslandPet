@@ -1,0 +1,23 @@
+{
+  "images" : [
+    {
+      "filename" : "pixellab-I-want-to-generate-a-dialog-bo-1776274722099.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "pixellab-I-want-to-generate-a-dialog-bo-1776274722099.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "pixellab-I-want-to-generate-a-dialog-bo-1776274722099.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

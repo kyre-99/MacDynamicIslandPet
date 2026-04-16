@@ -1,0 +1,16 @@
+{
+    "openaiApiKey": "",
+    "apiBaseUrl": "https://api.openai.com/v1",
+    "modelName": "gpt-4o-mini",
+    "visionModelName": "gpt-4o",
+    "maxTokens": 100,
+    "memoryRetentionDays": 30,
+    "personality": {
+        "chatEnthusiasm": 50,
+        "expressionStyle": 50,
+        "focusAttention": 50,
+        "thoughtDepth": 50,
+        "teasingTendency": 50
+    },
+    "newsInterests": ["科技", "娱乐", "游戏"]
+}

@@ -1,0 +1,34 @@
+# OS files
+.DS_Store
+
+# Xcode
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+xcuserdata/
+*.xcuserstate
+
+# Build outputs
+build/
+*.app
+*.app.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+
+# CocoaPods
+Pods/
+
+# Temporary files
+*.swp
+*.swo
+*~
+
+# Claude
+.claude/
+
+# Config with personal API keys (template is included)
+MacDynamicIslandPet/config.json
+
+# Archives
+archive/

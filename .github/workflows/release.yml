@@ -1,0 +1,57 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '14.2'
+
+      - name: Build app
+        run: |
+          xcodebuild -project MacDynamicIslandPet.xcodeproj \
+            -scheme MacDynamicIslandPet \
+            -configuration Release \
+            -derivedDataPath build \
+            clean build
+
+      - name: Package app
+        run: |
+          APP_PATH=$(find build/Build/Products/Release -name "*.app" -type d | head -1)
+          zip -r MacDynamicIslandPet.app.zip "$APP_PATH"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: MacDynamicIslandPet.app.zip
+          body: |
+            ## MacDynamicIslandPet Release
+
+            ### 下载使用
+            1. 下载 `MacDynamicIslandPet.app.zip`
+            2. 解压后双击运行
+            3. 首次运行可能需要右键选择"打开"
+
+            ### 功能特性
+            - 🏰 剑与魔法世界场景
+            - 🍜 世界美食系统
+            - ❤️ 10级进化系统
+            - 🎭 性格系统
+            - 🧠 智能记忆
+            - 💬 聊天互动
+            - 🧠 自主思考
+
+            详细说明请查看 README.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
