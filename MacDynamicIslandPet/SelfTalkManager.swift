@@ -196,6 +196,7 @@ class SelfTalkManager: ObservableObject {
         print("🧠 SelfTalkManager.triggerSelfTalk - reason: \(reason)")
         lastSelfTalkTime = Date()
         isGenerating = true
+        PetInternalStateManager.shared.recordSelfTalkTriggered(reason: reason)
 
         // 确定触发场景
         let triggerScene: BubbleTriggerScene
@@ -210,6 +211,7 @@ class SelfTalkManager: ObservableObject {
             triggerScene = .random
         }
 
+        logTriggerContext(reason: reason, triggerScene: triggerScene)
         print("🧠 SelfTalkManager: Using CommentGenerator with triggerScene: \(triggerScene.rawValue)")
 
         // 使用 CommentGenerator 生成气泡（包含记忆、性格、进化等级）
@@ -249,6 +251,24 @@ class SelfTalkManager: ObservableObject {
                 }
             }
         }
+    }
+
+    private func logTriggerContext(reason: String, triggerScene: BubbleTriggerScene) {
+        let activeApp = WindowObserver.shared.currentActiveApp
+        let activeDuration = Int(WindowObserver.shared.activeAppDuration)
+        let stationarySeconds = Int(Date().timeIntervalSince(lastPositionChangeTime))
+        let cooldownRemaining = max(0, Int(cooldownPeriod - Date().timeIntervalSince(lastSelfTalkTime)))
+
+        print("""
+🪵 [Phase0][SelfTalkTrigger]
+- reason: \(reason)
+- triggerScene: \(triggerScene.rawValue)
+- activeApp: \(activeApp)
+- activeDurationSec: \(activeDuration)
+- stationarySec: \(stationarySeconds)
+- bubbleShowing: \(shouldShowBubble)
+- cooldownRemainingSec: \(cooldownRemaining)
+""")
     }
 
     /// Show bubble with generated text

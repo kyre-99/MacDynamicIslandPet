@@ -111,6 +111,14 @@ class MemoryManager {
             )
             MemoryIndexManager.shared.addToInstantMemory(enhancedItem.toBaseMemoryItem(layer: .instant))
 
+            MemoryCardManager.shared.ingestConversation(
+                userInput: userInput,
+                petResponse: petResponse,
+                topics: topics,
+                emotions: emotions,
+                importanceScore: importanceScore
+            )
+
             // Refresh memory indices
             MemoryIndexManager.shared.refreshIndices()
 

@@ -1207,7 +1207,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.selfTalkBubbleWindow?.setFrame(newFrame, display: true)
                 }
             },
-            onDisappear: { [weak self] in
+            onBubbleDisappear: { [weak self] in
                 print("🔵 SelfTalkBubbleView onDisappear callback triggered (animation finished)")
                 self?.selfTalkBubbleWindow?.orderOut(nil)
                 // 气泡动画自然结束，不停止语音，让长语音播放完成
@@ -1217,7 +1217,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let frame = NSRect(x: bubbleX, y: bubbleY, width: minWidth, height: initialHeight)
         print("🔵 showSelfTalkBubble: Pet position y=\(position.y), bubbleY=\(bubbleY), tailDirection=\(tailDirection)")
-        selfTalkBubbleWindow?.setFrame(frame, display: true)
         selfTalkBubbleWindow?.setFrame(frame, display: true)
 
         selfTalkBubbleWindow?.contentView = NSHostingView(rootView: bubbleView)

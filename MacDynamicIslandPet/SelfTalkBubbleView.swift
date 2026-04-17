@@ -25,9 +25,10 @@ struct SelfTalkBubbleView: View {
     @State private var decorationOpacity: Double = 0.0
     @State private var textIndex: Int = 0
     @State private var lastNotifiedWidth: CGFloat = 80  // 记录上次通知的宽度，减少更新频率
+    @State private var scheduledWorkItems: [DispatchWorkItem] = []
 
     // Callback
-    var onDisappear: (() -> Void)?
+    var onBubbleDisappear: (() -> Void)?
 
     // MARK: - Dynamic Size (宽度增加以容纳完整内容)
 
@@ -114,6 +115,9 @@ struct SelfTalkBubbleView: View {
         .onAppear {
             startStreamAnimation()
         }
+        .onDisappear {
+            cancelScheduledAnimations()
+        }
     }
 
     // MARK: - Tail View
@@ -177,6 +181,8 @@ struct SelfTalkBubbleView: View {
     // MARK: - Stream Animation
 
     private func startStreamAnimation() {
+        cancelScheduledAnimations()
+
         // Bounce-in animation
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             scale = 1.0
@@ -193,7 +199,7 @@ struct SelfTalkBubbleView: View {
         for (index, char) in chars.enumerated() {
             delay = Double(index) * 0.16  // 每个字160ms，更像说话
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            let workItem = DispatchWorkItem {
                 displayedText += char
 
                 // 动态调整宽度和高度
@@ -223,15 +229,19 @@ struct SelfTalkBubbleView: View {
                     }
                 }
             }
+            scheduledWorkItems.append(workItem)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
         }
 
         // 文字输出完成后，最后确保窗口尺寸正确
         let finalDelay = Double(chars.count) * 0.16 + 0.1
-        DispatchQueue.main.asyncAfter(deadline: .now() + finalDelay) {
+        let finalResizeWorkItem = DispatchWorkItem {
             let finalWidth = currentWidth
             let finalHeight = currentHeight
             onSizeChange?(CGSize(width: finalWidth, height: finalHeight + 15))
         }
+        scheduledWorkItems.append(finalResizeWorkItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + finalDelay, execute: finalResizeWorkItem)
 
         // 全部输出完成后，停留更长时间让用户看完
         // 根据内容长度动态调整停留时间：最少6秒，最长12秒
@@ -240,16 +250,25 @@ struct SelfTalkBubbleView: View {
         let extraStayDuration = min(6.0, Double(chars.count) * 0.1)  // 根据内容长度增加停留
         let stayDuration = baseStayDuration + extraStayDuration  // 总停留时间
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + streamDuration + stayDuration) {
+        let fadeWorkItem = DispatchWorkItem {
             withAnimation(.easeOut(duration: 0.3)) {
                 opacity = 0
                 decorationOpacity = 0
             }
         }
+        scheduledWorkItems.append(fadeWorkItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + streamDuration + stayDuration, execute: fadeWorkItem)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + streamDuration + stayDuration + 0.4) {
-            onDisappear?()
+        let disappearWorkItem = DispatchWorkItem {
+            onBubbleDisappear?()
         }
+        scheduledWorkItems.append(disappearWorkItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + streamDuration + stayDuration + 0.4, execute: disappearWorkItem)
+    }
+
+    private func cancelScheduledAnimations() {
+        scheduledWorkItems.forEach { $0.cancel() }
+        scheduledWorkItems.removeAll()
     }
 }
 

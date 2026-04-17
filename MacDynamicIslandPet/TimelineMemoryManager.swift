@@ -293,6 +293,8 @@ class TimelineMemoryManager {
         events.append(event)
         saveEvents()
 
+        MemoryCardManager.shared.ingestTimelineEvent(event)
+
         // 检查是否是今日事件
         if event.isToday() {
             todayReminders.append(event)

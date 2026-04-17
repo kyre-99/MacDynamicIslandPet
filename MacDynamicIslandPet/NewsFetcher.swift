@@ -106,6 +106,7 @@ class NewsFetcher {
 
     /// 缓存时间戳
     private var cacheTimestamp: [NewsCategory: Date] = [:]
+    private let stateQueue = DispatchQueue(label: "com.wangzehua.MacDynamicIslandPet.NewsFetcher.state")
 
     private init() {}
 
@@ -117,8 +118,8 @@ class NewsFetcher {
     ///   - completion: 完成回调
     func fetchNews(for category: NewsCategory, completion: @escaping (Result<[NewsItem], NewsFetchError>) -> Void) {
         // 检查缓存是否有效
-        if let cached = newsCache[category],
-           let timestamp = cacheTimestamp[category],
+        if let cached = cachedNews(for: category),
+           let timestamp = cacheTimestamp(for: category),
            Date().timeIntervalSince(timestamp) < cacheExpiration {
             print("📰 NewsFetcher: Using cached news for \(category.displayName)")
             completion(.success(cached))
@@ -144,8 +145,7 @@ class NewsFetcher {
                     completion(.failure(.noData))
                 } else {
                     // 缓存结果
-                    self.newsCache[category] = newsItems
-                    self.cacheTimestamp[category] = Date()
+                    self.storeCachedNews(newsItems, for: category)
 
                     print("📰 NewsFetcher: Fetched \(newsItems.count) news items for \(category.displayName)")
                     completion(.success(newsItems))
@@ -167,6 +167,7 @@ class NewsFetcher {
     ) {
         var results: [NewsCategory: [NewsItem]] = [:]
         var errors: [NewsFetchError] = []
+        let aggregationQueue = DispatchQueue(label: "com.wangzehua.MacDynamicIslandPet.NewsFetcher.aggregate")
 
         let group = DispatchGroup()
 
@@ -174,13 +175,15 @@ class NewsFetcher {
             group.enter()
 
             fetchNews(for: category) { result in
-                switch result {
-                case .success(let items):
-                    results[category] = items
-                case .failure(let error):
-                    errors.append(error)
+                aggregationQueue.async {
+                    switch result {
+                    case .success(let items):
+                        results[category] = items
+                    case .failure(let error):
+                        errors.append(error)
+                    }
+                    group.leave()
                 }
-                group.leave()
             }
         }
 
@@ -190,6 +193,25 @@ class NewsFetcher {
             } else {
                 completion(.success(results))
             }
+        }
+    }
+
+    private func cachedNews(for category: NewsCategory) -> [NewsItem]? {
+        stateQueue.sync {
+            newsCache[category]
+        }
+    }
+
+    private func cacheTimestamp(for category: NewsCategory) -> Date? {
+        stateQueue.sync {
+            cacheTimestamp[category]
+        }
+    }
+
+    private func storeCachedNews(_ newsItems: [NewsItem], for category: NewsCategory) {
+        stateQueue.sync {
+            newsCache[category] = newsItems
+            cacheTimestamp[category] = Date()
         }
     }
 

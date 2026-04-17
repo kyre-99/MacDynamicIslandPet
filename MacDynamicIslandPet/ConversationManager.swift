@@ -42,13 +42,25 @@ class ConversationManager {
 
     /// Hide/close the conversation window
     func hideWindow() {
-        conversationWindow?.orderOut(nil)
+        guard let window = conversationWindow else { return }
+
+        removeClickOutsideMonitor()
         conversationWindow = nil
+        window.orderOut(nil)
         print("🧠 ConversationManager: Window destroyed, will create new on next open")
 
-        // 触发 LLM 分析管理器
-        ConversationAnalysisManager.shared.onConversationWindowClosed()
-        print("🧠 ConversationManager: Window closed, triggering analysis if pending")
+        // Avoid tearing down the hosting hierarchy while SwiftUI is still
+        // unwinding the current event callback from this window.
+        DispatchQueue.main.async {
+            window.contentView = nil
+            window.close()
+        }
+
+        DispatchQueue.main.async {
+            // 触发 LLM 分析管理器
+            ConversationAnalysisManager.shared.onConversationWindowClosed()
+            print("🧠 ConversationManager: Window closed, triggering analysis if pending")
+        }
     }
 
     /// Toggle window visibility
@@ -76,6 +88,7 @@ class ConversationManager {
         // 完全透明的窗口背景
         conversationWindow?.isOpaque = false
         conversationWindow?.backgroundColor = NSColor.clear
+        conversationWindow?.isReleasedWhenClosed = false
         conversationWindow?.level = .floating
         conversationWindow?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         conversationWindow?.hasShadow = true  // 开启阴影让圆角更自然
@@ -136,14 +149,18 @@ class ConversationManager {
     private var clickOutsideMonitor: Any?
 
     private func setupClickOutsideMonitor() {
-        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+        removeClickOutsideMonitor()
+
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let window = self?.conversationWindow, window.isVisible else { return }
 
             let windowFrame = window.frame
             let screenLocation = NSEvent.mouseLocation
 
             if !windowFrame.contains(screenLocation) {
-                self?.hideWindow()
+                DispatchQueue.main.async {
+                    self?.hideWindow()
+                }
             }
         }
     }
@@ -159,19 +176,31 @@ class ConversationManager {
 
     /// 处理发送消息
     private func handleSendMessage(_ message: String, completion: @escaping (Result<String, LLMError>) -> Void) {
-        let messages = buildConversationMessages(userInput: message)
-        print("🧠 ConversationManager: Sending conversation with \(messages.count) messages")
+        EmotionTracker.shared.resolveEmotionInsight(conversationContent: message) { insight in
+            PetInternalStateManager.shared.recordConversationStarted(
+                userInput: message,
+                emotionInsight: insight
+            )
+            let messages = self.buildConversationMessages(
+                userInput: message,
+                emotionInsight: insight
+            )
+            print("🧠 ConversationManager: Sending conversation with \(messages.count) messages")
 
-        LLMService.shared.sendConversationWithHistory(messages: messages, maxTokens: 300) { result in
-            if case .success = result {
-                EvolutionManager.shared.recordConversation()
+            LLMService.shared.sendConversationWithHistory(messages: messages, maxTokens: 300) { result in
+                if case .success = result {
+                    EvolutionManager.shared.recordConversation()
 
-                // 触发语音播放（如果启用）
-                if case .success(let response) = result {
-                    self.triggerSpeechIfEnabled(text: response)
+                    if case .success(let response) = result {
+                        PetInternalStateManager.shared.recordConversationCompleted(
+                            response: response,
+                            emotionInsight: insight
+                        )
+                        self.triggerSpeechIfEnabled(text: response)
+                    }
                 }
+                completion(result)
             }
-            completion(result)
         }
     }
 
@@ -206,11 +235,14 @@ class ConversationManager {
     }
 
     /// 构建完整对话 messages（OpenAI SDK 标准格式）
-    private func buildConversationMessages(userInput: String) -> [[String: String]] {
+    private func buildConversationMessages(
+        userInput: String,
+        emotionInsight: EmotionInsightSnapshot? = nil
+    ) -> [[String: String]] {
         var messages: [[String: String]] = []
 
         // 1. System message: 性格 + KnowledgeManager 知识
-        let systemContent = buildSystemPrompt()
+        let systemContent = buildSystemPrompt(userInput: userInput, emotionInsight: emotionInsight)
         messages.append(["role": "system", "content": systemContent])
 
         // 2. 对话历史：user/assistant 轮流排列
@@ -220,15 +252,30 @@ class ConversationManager {
         // 3. 当前用户输入
         messages.append(["role": "user", "content": userInput])
 
+        logConversationContext(
+            userInput: userInput,
+            systemContent: systemContent,
+            conversationHistory: conversationHistory
+        )
+
         return messages
     }
 
     /// 构建 System Prompt（性格 + KnowledgeManager 知识 + 系统时间）
-    private func buildSystemPrompt() -> String {
+    private func buildSystemPrompt(
+        userInput: String,
+        emotionInsight: EmotionInsightSnapshot? = nil
+    ) -> String {
         let personality = PersonalityManager.shared.currentProfile
         let evolutionState = EvolutionManager.shared.getEvolutionState()
-        let emotionState = EmotionTracker.shared.getCurrentEmotion()
+        let emotionState = emotionInsight?.emotion ?? EmotionTracker.shared.getCurrentEmotion()
         let timeContext = TimeContext.shared
+        let workingMemory = WorkingMemoryManager.shared.buildConversationContext(
+            userInput: userInput,
+            emotionOverride: emotionInsight?.emotion,
+            emotionInsightSummary: emotionInsight?.summary
+        )
+        let petInternalStateSummary = workingMemory.internalStateSummary
 
         // 当前时间
         let timeHint = "现在是\(timeContext.currentPeriod.displayName)，\(DateFormatter.localizedString(from: Date(), dateStyle: .full, timeStyle: .short))。"
@@ -278,6 +325,11 @@ class ConversationManager {
             emotionHint = ""
         }
 
+        if let emotionInsight {
+            let confidence = Int(emotionInsight.confidence * 100)
+            emotionHint += " 这次理解把握约\(confidence)% ，来源是\(emotionInsight.source)。最近趋势：\(emotionInsight.trend)。"
+        }
+
         // 从 KnowledgeManager 获取知识（包含不确定知识）
         let knowledgeContent = KnowledgeManager.shared.getSystemPromptKnowledge()
 
@@ -287,6 +339,15 @@ class ConversationManager {
         if !todayEvents.isEmpty {
             eventsHint = "\n#【今日特别】\n今天是特殊的日子：\n\(todayEvents)精灵可以适当提及这些特别的日子，表达关心或祝福。"
         }
+
+        logSystemPromptContext(
+            personalityHint: personalityHint,
+            relationHint: relationHint,
+            emotionHint: emotionHint,
+            timeHint: timeHint,
+            knowledgeContent: knowledgeContent,
+            todayEvents: todayEvents
+        )
 
         return """
 你现在正缩在屏幕的小角落里，作为一只鲜活的小精灵观察着这个世界，感受着这个人的情绪和状态。你会怎么想？会怎么说？请完全代入这个角色。
@@ -298,8 +359,13 @@ class ConversationManager {
 时钟指向 \(timeHint)。窗外的光影、当下的氛围都在影响你。
 #【你的知识】
 这是你脑海中对外面世界的知识库：\(knowledgeContent)。
-\(eventsHint)# 【对话要求】
+\(workingMemory.asPromptBlock())
+\(eventsHint)#【你的内心】
+请记住你不是空白地重新开始，而是带着自己此刻的内心在回应。
+\(petInternalStateSummary)
+# 【对话要求】
 请把你自己完全代入这个角色，回复用户的问题。
+如果你心里还挂着某件事，只能在合适时机轻轻接一下，不要每轮都重复提。
 
 """
     }
@@ -315,13 +381,70 @@ class ConversationManager {
             historyMessages.append(["role": "assistant", "content": petResponse])
         }
 
+        logConversationHistory(recentConversations)
+
         return historyMessages
+    }
+
+    private func logConversationContext(
+        userInput: String,
+        systemContent: String,
+        conversationHistory: [[String: String]]
+    ) {
+        let historyTurns = conversationHistory.count / 2
+        print("""
+🪵 [Phase0][ConversationContext]
+- userInput: \(previewText(userInput, limit: 80))
+- historyTurns: \(historyTurns)
+- systemPromptChars: \(systemContent.count)
+""")
+    }
+
+    private func logSystemPromptContext(
+        personalityHint: String,
+        relationHint: String,
+        emotionHint: String,
+        timeHint: String,
+        knowledgeContent: String,
+        todayEvents: String
+    ) {
+        print("""
+🪵 [Phase0][ConversationSystemPrompt]
+- personality: \(personalityHint)
+- relation: \(relationHint)
+- emotion: \(emotionHint.isEmpty ? "无明显情绪提示" : emotionHint)
+- time: \(timeHint)
+- knowledgeChars: \(knowledgeContent.count)
+- hasTodayEvents: \(!todayEvents.isEmpty)
+""")
+    }
+
+    private func logConversationHistory(_ recentConversations: [(String, String)]) {
+        let latestUser = recentConversations.last?.0 ?? "无"
+        let latestPet = recentConversations.last?.1 ?? "无"
+        print("""
+🪵 [Phase0][ConversationHistory]
+- recalledRounds: \(recentConversations.count)
+- latestUser: \(previewText(latestUser, limit: 60))
+- latestPet: \(previewText(latestPet, limit: 60))
+""")
+    }
+
+    private func previewText(_ text: String, limit: Int) -> String {
+        let normalized = text.replacingOccurrences(of: "\n", with: " ")
+        if normalized.count <= limit {
+            return normalized
+        }
+
+        let endIndex = normalized.index(normalized.startIndex, offsetBy: limit)
+        return String(normalized[..<endIndex]) + "..."
     }
 
     // MARK: - Cleanup
 
     deinit {
         removeClickOutsideMonitor()
+        conversationWindow?.contentView = nil
         conversationWindow?.close()
     }
 }

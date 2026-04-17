@@ -1,5 +1,21 @@
 import Foundation
 
+struct ConversationUnderstandingCandidate: Codable {
+    let emotion: UserEmotionState
+    let confidence: Double
+    let unfinishedTopic: String?
+    let suggestedPetGoal: String?
+    let summary: String
+
+    static let neutralFallback = ConversationUnderstandingCandidate(
+        emotion: .neutral,
+        confidence: 0.3,
+        unfinishedTopic: nil,
+        suggestedPetGoal: nil,
+        summary: "没有足够信号，先按中性理解。"
+    )
+}
+
 /// Structured result from visual analysis
 /// US-004: Provides structured activity detection
 struct VisualAnalysisResult: Codable {
@@ -120,6 +136,64 @@ class LLMService {
 
         print("🟢 LLMService.sendSelfTalkSystem: Single system message")
         sendRequest(messages: messages, maxTokens: maxTokens, completion: completion)
+    }
+
+    func analyzeConversationUnderstanding(
+        userInput: String,
+        recentContext: String?,
+        completion: @escaping (Result<ConversationUnderstandingCandidate, LLMError>) -> Void
+    ) {
+        guard isConfigured() else {
+            completion(.failure(.notConfigured))
+            return
+        }
+
+        let systemPrompt = """
+你在做对话理解，不是回复用户。
+请根据用户这句话和最近上下文，输出严格 JSON。
+
+情绪只能从这些值里选一个：
+忙碌、放松、焦虑、专注、开心、沮丧、兴奋、疲惫、压力、中性
+
+规则：
+1. 不要把轻微抱怨一律判成沮丧或压力。
+2. 如果信息不足，选择中性并降低 confidence。
+3. unfinishedTopic 只有在“这件事之后还值得再提一下”时才填写。
+4. suggestedPetGoal 用一句短话描述小人这轮更该怎么陪，例如“先轻轻安慰一下”。
+5. 只输出 JSON，不要解释，不要 markdown。
+
+JSON 格式：
+{
+  "emotion": "中性",
+  "confidence": 0.42,
+  "unfinishedTopic": "可选，字符串或 null",
+  "suggestedPetGoal": "可选，字符串或 null",
+  "summary": "一句简短判断"
+}
+"""
+
+        var userPrompt = "用户当前输入：\(userInput)"
+        if let recentContext, !recentContext.isEmpty {
+            userPrompt += "\n最近上下文：\(recentContext)"
+        }
+
+        let messages = [
+            ["role": "system", "content": systemPrompt],
+            ["role": "user", "content": userPrompt]
+        ]
+
+        sendRequest(messages: messages, maxTokens: 180, temperature: 0.2) { result in
+            switch result {
+            case .success(let content):
+                guard let candidate = self.parseConversationUnderstandingCandidate(from: content) else {
+                    completion(.failure(.parseError))
+                    return
+                }
+                completion(.success(candidate))
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
     }
 
     /// Generate a self-talk phrase (short, cute)
@@ -476,6 +550,7 @@ class LLMService {
     private func sendRequest(
         messages: [[String: String]],
         maxTokens: Int? = nil,
+        temperature: Double = 0.8,
         completion: @escaping (Result<String, LLMError>) -> Void
     ) {
         guard let config = config else {
@@ -493,7 +568,7 @@ class LLMService {
             "model": config.modelName,
             "messages": messages,
             "max_tokens": tokenLimit,
-            "temperature": 0.8  // Higher temperature for more creative responses
+            "temperature": temperature
         ]
 
         guard let url = URL(string: config.apiBaseUrl + "/chat/completions") else {
@@ -584,6 +659,51 @@ class LLMService {
         }
 
         task.resume()
+    }
+
+    private func parseConversationUnderstandingCandidate(from content: String) -> ConversationUnderstandingCandidate? {
+        let cleaned = extractJSONObject(from: content)
+        guard let data = cleaned.data(using: .utf8) else {
+            return nil
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        guard let emotionRaw = json["emotion"] as? String,
+              let emotion = UserEmotionState(rawValue: emotionRaw) else {
+            return nil
+        }
+
+        let confidence = max(0.0, min(1.0, json["confidence"] as? Double ?? 0.3))
+        let unfinishedTopic = json["unfinishedTopic"] as? String
+        let suggestedPetGoal = json["suggestedPetGoal"] as? String
+        let summary = (json["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "无额外说明"
+
+        return ConversationUnderstandingCandidate(
+            emotion: emotion,
+            confidence: confidence,
+            unfinishedTopic: unfinishedTopic?.nilIfBlank,
+            suggestedPetGoal: suggestedPetGoal?.nilIfBlank,
+            summary: summary
+        )
+    }
+
+    private func extractJSONObject(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("```") {
+            let lines = trimmed.components(separatedBy: .newlines).filter { !$0.hasPrefix("```") }
+            return lines.joined(separator: "\n")
+        }
+        return trimmed
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

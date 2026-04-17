@@ -236,6 +236,33 @@ struct EmotionPatterns: Codable {
     }
 }
 
+struct EmotionInsightSnapshot {
+    let emotion: UserEmotionState
+    let confidence: Double
+    let source: String
+    let unfinishedTopic: String?
+    let suggestedPetGoal: String?
+    let summary: String
+    let trend: String
+
+    static func fromRuleInference(
+        emotion: UserEmotionState,
+        confidence: Double,
+        trend: String,
+        source: String
+    ) -> EmotionInsightSnapshot {
+        EmotionInsightSnapshot(
+            emotion: emotion,
+            confidence: confidence,
+            source: source,
+            unfinishedTopic: nil,
+            suggestedPetGoal: nil,
+            summary: "规则推断为\(emotion.rawValue)",
+            trend: trend
+        )
+    }
+}
+
 // MARK: - Emotion Tracker Manager
 
 /// 情感状态追踪管理器
@@ -265,6 +292,9 @@ class EmotionTracker {
     /// 当前情感状态缓存
     private var currentEmotionCache: UserEmotionState = .neutral
     private var currentEmotionCacheTime: Date = Date()
+    private var lastConversationInsight: EmotionInsightSnapshot?
+    private var lastConversationInsightAt: Date = .distantPast
+    private var lastConversationContent: String?
 
     /// 缓存有效期（5分钟）
     private let cacheValidityDuration: TimeInterval = 300
@@ -433,12 +463,89 @@ class EmotionTracker {
         return (emotion: .neutral, confidence: 0.3)
     }
 
+    func resolveEmotionInsight(
+        conversationContent: String,
+        completion: @escaping (EmotionInsightSnapshot) -> Void
+    ) {
+        let trimmedContent = conversationContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else {
+            DispatchQueue.main.async {
+                completion(
+                EmotionInsightSnapshot.fromRuleInference(
+                    emotion: .neutral,
+                    confidence: 0.3,
+                    trend: self.getRecentEmotionTrendDescription(),
+                    source: "empty-input"
+                )
+                )
+            }
+            return
+        }
+
+        if let lastConversationInsight,
+           lastConversationContent == trimmedContent,
+           Date().timeIntervalSince(lastConversationInsightAt) < 180 {
+            DispatchQueue.main.async {
+                completion(lastConversationInsight)
+            }
+            return
+        }
+
+        let ruleInference = inferCurrentEmotion(conversationContent: trimmedContent)
+        let trend = getRecentEmotionTrendDescription()
+        let recentContext = buildRecentConversationContext()
+
+        guard LLMService.shared.isConfigured() else {
+            let fallback = EmotionInsightSnapshot.fromRuleInference(
+                emotion: ruleInference.emotion,
+                confidence: ruleInference.confidence,
+                trend: trend,
+                source: "rules-only"
+            )
+            cacheConversationInsight(fallback, content: trimmedContent)
+            DispatchQueue.main.async {
+                completion(fallback)
+            }
+            return
+        }
+
+        LLMService.shared.analyzeConversationUnderstanding(
+            userInput: trimmedContent,
+            recentContext: recentContext
+        ) { result in
+            let merged: EmotionInsightSnapshot
+            switch result {
+            case .success(let candidate):
+                merged = self.mergeEmotionInference(rule: ruleInference, llm: candidate, trend: trend)
+            case .failure:
+                merged = EmotionInsightSnapshot.fromRuleInference(
+                    emotion: ruleInference.emotion,
+                    confidence: ruleInference.confidence,
+                    trend: trend,
+                    source: "rules-fallback"
+                )
+            }
+
+            self.cacheConversationInsight(merged, content: trimmedContent)
+            DispatchQueue.main.async {
+                completion(merged)
+            }
+        }
+    }
+
     // MARK: - Get Current Emotion
 
     /// 获取当前情感状态（使用缓存机制）
     /// - Parameter conversationContent: 可选的对话内容
     /// - Returns: 当前情感状态
     func getCurrentEmotion(conversationContent: String? = nil) -> UserEmotionState {
+        if let conversationContent,
+           let lastConversationInsight,
+           lastConversationContent == conversationContent.trimmingCharacters(in: .whitespacesAndNewlines),
+           Date().timeIntervalSince(lastConversationInsightAt) < 180 {
+            return lastConversationInsight.emotion
+        }
+
         // 检查缓存是否有效
         let now = Date()
         if now.timeIntervalSince(currentEmotionCacheTime) < cacheValidityDuration && conversationContent == nil {
@@ -850,6 +957,28 @@ class EmotionTracker {
         return emotion.rawValue
     }
 
+    func getRecentEmotionTrendDescription() -> String {
+        let recentHistory = loadEmotionHistory().suffix(6)
+        guard !recentHistory.isEmpty else {
+            return "最近情绪趋势还不明显"
+        }
+
+        let negativeStates: Set<UserEmotionState> = [.anxious, .sad, .stressed, .tired]
+        let positiveStates: Set<UserEmotionState> = [.happy, .excited, .relaxed]
+        let negativeCount = recentHistory.filter { negativeStates.contains($0.emotion) }.count
+        let positiveCount = recentHistory.filter { positiveStates.contains($0.emotion) }.count
+
+        if negativeCount >= 3 && negativeCount > positiveCount {
+            return "最近几次更偏疲惫或压力"
+        }
+
+        if positiveCount >= 3 && positiveCount > negativeCount {
+            return "最近几次整体偏轻松或开心"
+        }
+
+        return "最近情绪有波动，但没有完全倒向某一边"
+    }
+
     /// 获取情感模式描述（用于LLM Prompt）
     /// - Returns: 情感模式描述字符串
     func getEmotionPatternsDescription() -> String {
@@ -926,5 +1055,76 @@ class EmotionTracker {
     func isRelaxedState() -> Bool {
         let emotion = getCurrentEmotion()
         return emotion == .relaxed || emotion == .happy || emotion == .excited
+    }
+
+    // MARK: - Hybrid Inference Helpers
+
+    private func mergeEmotionInference(
+        rule: (emotion: UserEmotionState, confidence: Double),
+        llm: ConversationUnderstandingCandidate,
+        trend: String
+    ) -> EmotionInsightSnapshot {
+        let normalizedRuleConfidence = max(0.0, min(1.0, rule.confidence))
+        let normalizedLLMConfidence = max(0.0, min(1.0, llm.confidence))
+
+        let selectedEmotion: UserEmotionState
+        let source: String
+
+        if llm.emotion == rule.emotion {
+            selectedEmotion = llm.emotion
+            source = "rules+llm"
+        } else if normalizedLLMConfidence >= 0.78 && normalizedLLMConfidence - normalizedRuleConfidence >= 0.12 {
+            selectedEmotion = llm.emotion
+            source = "llm-dominant"
+        } else {
+            selectedEmotion = rule.emotion
+            source = "rules-dominant"
+        }
+
+        let mergedConfidence: Double
+        if llm.emotion == rule.emotion {
+            mergedConfidence = min(0.95, max(normalizedRuleConfidence, normalizedLLMConfidence) + 0.08)
+        } else if source == "llm-dominant" {
+            mergedConfidence = normalizedLLMConfidence
+        } else {
+            mergedConfidence = max(normalizedRuleConfidence, normalizedLLMConfidence * 0.7)
+        }
+
+        return EmotionInsightSnapshot(
+            emotion: selectedEmotion,
+            confidence: mergedConfidence,
+            source: source,
+            unfinishedTopic: llm.unfinishedTopic,
+            suggestedPetGoal: llm.suggestedPetGoal,
+            summary: llm.summary,
+            trend: trend
+        )
+    }
+
+    private func cacheConversationInsight(_ insight: EmotionInsightSnapshot, content: String) {
+        lastConversationInsight = insight
+        lastConversationInsightAt = Date()
+        lastConversationContent = content
+        currentEmotionCache = insight.emotion
+        currentEmotionCacheTime = Date()
+        recordEmotionChange(
+            emotion: insight.emotion,
+            triggerSource: "conversation-\(insight.source)",
+            confidence: insight.confidence
+        )
+        print("💭 EmotionTracker: Resolved hybrid insight - emotion=\(insight.emotion.rawValue), source=\(insight.source), trend=\(insight.trend)")
+    }
+
+    private func buildRecentConversationContext() -> String {
+        let recentConversations = KnowledgeManager.shared.getRecentConversations(count: 3)
+        guard !recentConversations.isEmpty else {
+            return getRecentEmotionTrendDescription()
+        }
+
+        let summary = recentConversations.suffix(3).map { item in
+            "用户：\(item.userInput)｜精灵：\(item.petResponse)"
+        }.joined(separator: "\n")
+
+        return summary + "\n情绪趋势：" + getRecentEmotionTrendDescription()
     }
 }

@@ -548,6 +548,8 @@ class CommentGenerator: ObservableObject {
         let evolutionState = evolutionManager.getEvolutionState()
         let emotionState = emotionTracker.getCurrentEmotion()
         let timeContext = TimeContext.shared
+        let workingMemory = WorkingMemoryManager.shared.buildSelfTalkContext(triggerScene: triggerScene)
+        let petInternalStateSummary = workingMemory.internalStateSummary
 
         print("🟣 [US-008] buildSelfTalkSystemMessage - 进化等级：\(evolutionState.currentLevel.rawValue), 互动天数：\(evolutionState.daysTogether)")
 
@@ -628,6 +630,17 @@ class CommentGenerator: ObservableObject {
         // 主人当前状态
         let masterStatus = buildMasterCurrentStatus(triggerScene)
 
+        logSelfTalkContext(
+            triggerScene: triggerScene,
+            personalityHint: personalityHint,
+            relationHint: relationHint,
+            emotionHint: emotionHint,
+            timeHint: timeHint,
+            masterStatus: masterStatus,
+            knowledgeContent: knowledgeContent,
+            todayEvents: todayEvents
+        )
+
         print("🟣 [US-008] 气泡最大长度：\(maxLength)字 (根据进化等级)")
 
         return """
@@ -640,10 +653,14 @@ class CommentGenerator: ObservableObject {
 时钟指向 \(timeHint)。窗外的光影、当下的氛围都在影响你。
 #【你的知识】
 这是你脑海中对外面世界的知识库：\(knowledgeContent)。
+\(workingMemory.asPromptBlock())
 \(eventsHint)#【你的状态】
 你现在正忙于 \(moodHint)，而那个正盯着你看的人类正处于 \(masterStatus) 的状态。
+#【你的内心】
+\(petInternalStateSummary)
 # 【对话要求】
 请把你自己完全代入这个角色，吐露一段内心的碎碎念或自言自语。
+如果心里还挂着一件事，只能轻轻带一下，不要把同一句挂念反复念出来。
 拒绝套路： 不要说"作为小精灵..."这种废话，直接开始你的表演。
 字数限制： 严格控制在 \(maxLength) 字以内。
 纯净输出： 只输出你想说的话（对话气泡内容），一个字的解释都不要有。
@@ -806,6 +823,13 @@ class CommentGenerator: ObservableObject {
         // 构建完整的 system message（精灵信息 + 主人状态 + 记忆）
         let systemContent = buildSelfTalkSystemMessage(triggerScene: triggerScene)
 
+        logBubbleGenerationRequest(
+            triggerScene: triggerScene,
+            selectedType: selectedType,
+            maxLength: maxLength,
+            systemContent: systemContent
+        )
+
         print("🧠 CommentGenerator: Sending self-talk with single system message")
 
         // 调用LLM（只用 system message）
@@ -825,10 +849,20 @@ class CommentGenerator: ObservableObject {
                         if self.isDuplicateComment(trimmed) {
                             // 使用对应类型的fallback
                             let fallback = self.getFallbackForBubbleType(selectedType)
+                            self.logBubbleGenerationResult(
+                                selectedType: selectedType,
+                                content: fallback,
+                                source: "fallback-after-duplicate"
+                            )
                             self.currentComment = fallback
                             self.recordComment(fallback)
                             completion(.success((content: fallback, type: selectedType)))
                         } else {
+                            self.logBubbleGenerationResult(
+                                selectedType: selectedType,
+                                content: trimmed,
+                                source: "llm"
+                            )
                             self.currentComment = trimmed
                             self.recordComment(trimmed)
                             completion(.success((content: trimmed, type: selectedType)))
@@ -837,6 +871,11 @@ class CommentGenerator: ObservableObject {
                     case .failure:
                         // 使用fallback
                         let fallback = self.getFallbackForBubbleType(selectedType)
+                        self.logBubbleGenerationResult(
+                            selectedType: selectedType,
+                            content: fallback,
+                            source: "fallback-after-error"
+                        )
                         self.currentComment = fallback
                         self.recordComment(fallback)
                         completion(.success((content: fallback, type: selectedType)))
@@ -865,6 +904,74 @@ class CommentGenerator: ObservableObject {
     func getFallbackForBubbleType(_ bubbleType: BubbleType) -> String {
         let fallbacks = fallbackContent[bubbleType] ?? ["..."]
         return fallbacks.randomElement() ?? "..."
+    }
+
+    private func logSelfTalkContext(
+        triggerScene: BubbleTriggerScene,
+        personalityHint: String,
+        relationHint: String,
+        emotionHint: String,
+        timeHint: String,
+        masterStatus: String,
+        knowledgeContent: String,
+        todayEvents: String
+    ) {
+        let recentPerceptions = perceptionMemory.getRecentPerceptions(count: 3)
+        let latestPerception = recentPerceptions.last?.activity ?? "无"
+        print("""
+🪵 [Phase0][SelfTalkContext]
+- triggerScene: \(triggerScene.rawValue)
+- personality: \(personalityHint)
+- relation: \(relationHint)
+- emotion: \(emotionHint.isEmpty ? "无明显情绪提示" : emotionHint)
+- time: \(timeHint)
+- masterStatus: \(masterStatus)
+- knowledgeChars: \(knowledgeContent.count)
+- hasTodayEvents: \(!todayEvents.isEmpty)
+- recentPerceptions: \(recentPerceptions.count)
+- latestPerception: \(previewText(latestPerception, limit: 50))
+""")
+    }
+
+    private func logBubbleGenerationRequest(
+        triggerScene: BubbleTriggerScene,
+        selectedType: BubbleType,
+        maxLength: Int,
+        systemContent: String
+    ) {
+        print("""
+🪵 [Phase0][BubbleGenerationRequest]
+- triggerScene: \(triggerScene.rawValue)
+- bubbleType: \(selectedType.displayName)
+- app: \(windowObserver.currentActiveApp)
+- activeDurationSec: \(Int(windowObserver.activeAppDuration))
+- currentEmotion: \(emotionTracker.getCurrentEmotion().rawValue)
+- maxLength: \(maxLength)
+- promptChars: \(systemContent.count)
+""")
+    }
+
+    private func logBubbleGenerationResult(
+        selectedType: BubbleType,
+        content: String,
+        source: String
+    ) {
+        print("""
+🪵 [Phase0][BubbleGenerationResult]
+- bubbleType: \(selectedType.displayName)
+- source: \(source)
+- content: \(previewText(content, limit: 60))
+""")
+    }
+
+    private func previewText(_ text: String, limit: Int) -> String {
+        let normalized = text.replacingOccurrences(of: "\n", with: " ")
+        if normalized.count <= limit {
+            return normalized
+        }
+
+        let endIndex = normalized.index(normalized.startIndex, offsetBy: limit)
+        return String(normalized[..<endIndex]) + "..."
     }
 
     // MARK: - US-012: Personality Influence Verification

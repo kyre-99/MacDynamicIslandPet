@@ -152,6 +152,9 @@ struct LongTermMemoryConfig: Codable {
 /// ├── daily/            (L2每日Markdown文件)
 /// ├── timeline.json     (L3事件时间线)
 /// ├── user-profile.json (L4用户画像)
+/// ├── pet-internal-state.json (小人内部状态)
+/// ├── memory-cards.json (结构化记忆卡片)
+/// ├── relationship-summary.json (关系摘要)
 /// ├── autonomous/       (自主思考历史)
 /// └── evolution.json    (进化状态)
 enum MemoryStoragePath {
@@ -172,6 +175,15 @@ enum MemoryStoragePath {
 
     /// L4长期记忆文件 - user-profile.json用户画像
     static let userProfileFile: URL = memoryDirectory.appendingPathComponent("user-profile.json")
+
+    /// 小人内部状态文件
+    static let petInternalStateFile: URL = memoryDirectory.appendingPathComponent("pet-internal-state.json")
+
+    /// 结构化记忆卡片文件
+    static let memoryCardsFile: URL = memoryDirectory.appendingPathComponent("memory-cards.json")
+
+    /// 关系摘要文件
+    static let relationshipSummaryFile: URL = memoryDirectory.appendingPathComponent("relationship-summary.json")
 
     /// 自主思考历史目录
     static let autonomousDirectory: URL = memoryDirectory.appendingPathComponent("autonomous")

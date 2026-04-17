@@ -95,14 +95,7 @@ class WindowObserver: ObservableObject {
 
             print("🟣 WindowObserver: Published currentActiveApp = '\(appName)'")
 
-            // Add to history
-            appSwitchHistory.append((app: appName, time: switchTime))
-            if appSwitchHistory.count > maxHistorySize {
-                appSwitchHistory.removeFirst()
-            }
-
-            // Add to history
-            addToHistory(app: previousApp, time: switchTime)
+            addToHistory(app: appName, time: switchTime)
 
             print("WindowObserver: App switched from '\(previousApp)' to '\(appName)'")
         }

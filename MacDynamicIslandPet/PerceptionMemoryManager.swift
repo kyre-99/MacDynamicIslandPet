@@ -165,6 +165,13 @@ class PerceptionMemoryManager {
             print("⚠️ Failed to save perception: \(error.localizedDescription)")
         }
 
+        MemoryCardManager.shared.ingestPerception(
+            appName: appName,
+            activityDescription: activityDescription,
+            screenshotSummary: screenshotSummary,
+            petReaction: petReaction
+        )
+
         // Cleanup old files (reuse memoryRetentionDays config)
         cleanupOldMemoryFiles()
     }

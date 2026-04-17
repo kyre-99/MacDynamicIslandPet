@@ -54,6 +54,16 @@ class ScreenCaptureService: ObservableObject {
     ///   - quality: JPEG compression quality (0.0-1.0, default: 0.8)
     /// - Returns: Base64 encoded string of the screenshot
     func captureScreen(excludeMenuBar: Bool = true, quality: Float = 0.8) -> String? {
+        if Thread.isMainThread {
+            return captureScreenOnMain(excludeMenuBar: excludeMenuBar, quality: quality)
+        }
+
+        return DispatchQueue.main.sync {
+            captureScreenOnMain(excludeMenuBar: excludeMenuBar, quality: quality)
+        }
+    }
+
+    private func captureScreenOnMain(excludeMenuBar: Bool, quality: Float) -> String? {
         isCapturing = true
 
         guard let screen = NSScreen.main else {
@@ -114,11 +124,9 @@ class ScreenCaptureService: ObservableObject {
 
     /// Capture screen asynchronously (for non-blocking use)
     func captureScreenAsync(excludeMenuBar: Bool = true, quality: Float = 0.8, completion: @escaping (String?) -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = self?.captureScreen(excludeMenuBar: excludeMenuBar, quality: quality)
-            DispatchQueue.main.async {
-                completion(result)
-            }
+        DispatchQueue.main.async { [weak self] in
+            let result = self?.captureScreenOnMain(excludeMenuBar: excludeMenuBar, quality: quality)
+            completion(result)
         }
     }
 

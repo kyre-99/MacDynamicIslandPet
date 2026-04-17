@@ -69,6 +69,15 @@
 				A1000063 /* SceneObjectManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000063 /* SceneObjectManager.swift */; };
 				A1000064 /* SceneWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000064 /* SceneWindowManager.swift */; };
 				A1000065 /* AboutWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000065 /* AboutWindow.swift */; };
+				A1000066 /* PetInternalStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000066 /* PetInternalStateManager.swift */; };
+				A1000067 /* PetInternalStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000067 /* PetInternalStateTests.swift */; };
+				A1000068 /* WorkingMemoryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000068 /* WorkingMemoryManager.swift */; };
+				A1000069 /* MemoryCardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000069 /* MemoryCardManager.swift */; };
+				A1000070 /* MemoryCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000070 /* MemoryCardTests.swift */; };
+				A1000071 /* RelationshipMemoryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000071 /* RelationshipMemoryManager.swift */; };
+				A1000072 /* RelationshipMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000072 /* RelationshipMemoryTests.swift */; };
+				A1000073 /* WorkingMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000073 /* WorkingMemoryTests.swift */; };
+				A1000074 /* BehaviorRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000074 /* BehaviorRegressionTests.swift */; };
 
 		A1000120 /* HoverInteractionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000120 /* HoverInteractionManager.swift */; };
 		A1000123 /* InteractionOptionsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000123 /* InteractionOptionsManager.swift */; };
@@ -140,6 +149,15 @@
 				A2000063 /* SceneObjectManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneObjectManager.swift; sourceTree = "<group>"; };
 				A2000064 /* SceneWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneWindowManager.swift; sourceTree = "<group>"; };
 				A2000065 /* AboutWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutWindow.swift; sourceTree = "<group>"; };
+				A2000066 /* PetInternalStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetInternalStateManager.swift; sourceTree = "<group>"; };
+				A2000067 /* PetInternalStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetInternalStateTests.swift; sourceTree = "<group>"; };
+				A2000068 /* WorkingMemoryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkingMemoryManager.swift; sourceTree = "<group>"; };
+				A2000069 /* MemoryCardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryCardManager.swift; sourceTree = "<group>"; };
+				A2000070 /* MemoryCardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryCardTests.swift; sourceTree = "<group>"; };
+				A2000071 /* RelationshipMemoryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationshipMemoryManager.swift; sourceTree = "<group>"; };
+				A2000072 /* RelationshipMemoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationshipMemoryTests.swift; sourceTree = "<group>"; };
+				A2000073 /* WorkingMemoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkingMemoryTests.swift; sourceTree = "<group>"; };
+				A2000074 /* BehaviorRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BehaviorRegressionTests.swift; sourceTree = "<group>"; };
 			A2000120 /* HoverInteractionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverInteractionManager.swift; sourceTree = "<group>"; };
 		A2000123 /* InteractionOptionsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionOptionsManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -230,6 +248,15 @@ A2000001 /* MacDynamicIslandPetApp.swift */,
 					A2000063 /* SceneObjectManager.swift */,
 					A2000064 /* SceneWindowManager.swift */,
 					A2000065 /* AboutWindow.swift */,
+					A2000066 /* PetInternalStateManager.swift */,
+					A2000067 /* PetInternalStateTests.swift */,
+					A2000068 /* WorkingMemoryManager.swift */,
+					A2000069 /* MemoryCardManager.swift */,
+					A2000070 /* MemoryCardTests.swift */,
+					A2000071 /* RelationshipMemoryManager.swift */,
+					A2000072 /* RelationshipMemoryTests.swift */,
+					A2000073 /* WorkingMemoryTests.swift */,
+					A2000074 /* BehaviorRegressionTests.swift */,
 				A2000005 /* Assets.xcassets */,
 						A2000006 /* Info.plist */,
 						A2000007 /* MacDynamicIslandPet.entitlements */,
@@ -377,6 +404,15 @@ A1000001 /* MacDynamicIslandPetApp.swift in Sources */,
 				A1000063 /* SceneObjectManager.swift in Sources */,
 				A1000064 /* SceneWindowManager.swift in Sources */,
 					A1000065 /* AboutWindow.swift in Sources */,
+				A1000066 /* PetInternalStateManager.swift in Sources */,
+				A1000067 /* PetInternalStateTests.swift in Sources */,
+				A1000068 /* WorkingMemoryManager.swift in Sources */,
+				A1000069 /* MemoryCardManager.swift in Sources */,
+				A1000070 /* MemoryCardTests.swift in Sources */,
+				A1000071 /* RelationshipMemoryManager.swift in Sources */,
+				A1000072 /* RelationshipMemoryTests.swift in Sources */,
+				A1000073 /* WorkingMemoryTests.swift in Sources */,
+				A1000074 /* BehaviorRegressionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

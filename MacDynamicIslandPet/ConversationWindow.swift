@@ -8,6 +8,7 @@ struct ConversationWindowView: View {
     @State private var conversations: [EnhancedMemoryItem] = []
     @State private var isThinking: Bool = false
     @State private var errorMessage: String?
+    @State private var isViewVisible: Bool = false
 
     // Callbacks
     var onClose: (() -> Void)?
@@ -50,11 +51,15 @@ struct ConversationWindowView: View {
         )
         .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)  // 阴影放在裁剪后面
         .onAppear {
+            isViewVisible = true
             // 每次打开窗口时清空对话界面（开始新对话）
             // 历史记忆保留在后台MemoryManager中
             conversations = []
             inputText = ""
             print("🧠 ConversationWindow: 清空对话界面，开始新对话")
+        }
+        .onDisappear {
+            isViewVisible = false
         }
     }
 
@@ -507,6 +512,9 @@ struct ConversationWindowView: View {
         // Call the send message callback
         onSendMessage?(message) { result in
             DispatchQueue.main.async {
+                guard isViewVisible else {
+                    return
+                }
                 isThinking = false
 
                 switch result {
