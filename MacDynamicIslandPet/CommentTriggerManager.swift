@@ -200,7 +200,7 @@ class CommentTriggerManager: ObservableObject {
                     print("CommentTrigger: Pet pat (\(self.petPatCount) pats) - '\(bubbleResult.content)'")
 
                 case .failure:
-                    // Fallback 到简单回应
+                    // Fallback 到简单回应 - 不播放语音
                     let fallbackComments = [
                         "拍拍好舒服~",
                         "好痒好痒~",
@@ -209,7 +209,7 @@ class CommentTriggerManager: ObservableObject {
                         "拍上瘾了~"
                     ]
                     let fallback = fallbackComments.randomElement() ?? "别拍啦~"
-                    self.showTriggeredComment(fallback, trigger: .petPat)
+                    self.showTriggeredComment(fallback, trigger: .petPat, playSpeech: false)
                 }
             }
 
@@ -220,15 +220,17 @@ class CommentTriggerManager: ObservableObject {
 
     // MARK: - Comment Display
 
-    private func showTriggeredComment(_ comment: String, trigger: TriggerType) {
-        // 使用统一接口显示气泡，不设置自定义隐藏时间
-        // 让气泡视图的流式动画自己控制消失
-        selfTalkManager.showExternalBubble(text: comment)
+    /// 显示触发的气泡
+    /// - Parameters:
+    ///   - comment: 气泡内容
+    ///   - trigger: 触发类型
+    ///   - playSpeech: 是否播放语音（LLM成功时true，fallback时false）
+    private func showTriggeredComment(_ comment: String, trigger: TriggerType, playSpeech: Bool = true) {
+        // 使用统一接口显示气泡
+        selfTalkManager.showExternalBubble(text: comment, playSpeech: playSpeech)
 
         isTriggerActive = true
         currentTrigger = trigger
-
-        // 不再使用外部计时器隐藏气泡，让气泡视图自己控制
     }
 
     // MARK: - Configuration

@@ -234,9 +234,9 @@ class SelfTalkManager: ObservableObject {
 
                 case .failure(let error):
                     print("🧠 SelfTalkManager: CommentGenerator failed - \(error.errorDescription ?? "unknown")")
-                    // Use fallback text
+                    // Use fallback text - 不播放语音，只显示气泡
                     let fallback = self?.fallbackText() ?? "..."
-                    self?.showBubble(text: fallback)
+                    self?.showBubble(text: fallback, playSpeech: false)
 
                     // 记录fallback到记忆
                     let appName = WindowObserver.shared.currentActiveApp
@@ -253,7 +253,10 @@ class SelfTalkManager: ObservableObject {
 
     /// Show bubble with generated text
     /// 修复：不再设置外部自动隐藏时间，让气泡视图自己控制消失
-    private func showBubble(text: String) {
+    /// - Parameters:
+    ///   - text: 气泡文本
+    ///   - playSpeech: 是否播放语音（默认 true，fallback 时设为 false）
+    private func showBubble(text: String, playSpeech: Bool = true) {
         // 如果当前有气泡显示，先检查显示时间是否足够
         if shouldShowBubble {
             if let startTime = bubbleDisplayStartTime {
@@ -265,9 +268,11 @@ class SelfTalkManager: ObservableObject {
                     if hasPendingBubble {
                         print("🧠 SelfTalkManager: Updating pending bubble content")
                         pendingBubbleText = text
+                        pendingPlaySpeech = playSpeech
                     } else {
                         hasPendingBubble = true
                         pendingBubbleText = text
+                        pendingPlaySpeech = playSpeech
                         // 延迟显示新气泡
                         let delay = minBubbleDisplayTime - displayTime
                         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -282,20 +287,26 @@ class SelfTalkManager: ObservableObject {
         // 清除任何待显示的气泡（因为我们要立即显示新的）
         hasPendingBubble = false
         pendingBubbleText = nil
+        pendingPlaySpeech = nil
 
-        showBubbleInternal(text: text)
+        showBubbleInternal(text: text, playSpeech: playSpeech)
     }
+
+    /// 待显示气泡是否播放语音
+    private var pendingPlaySpeech: Bool?
 
     /// 显示待显示的气泡
     private func showPendingBubble() {
-        guard hasPendingBubble, let text = pendingBubbleText else {
+        guard hasPendingBubble, let text = pendingBubbleText, let playSpeech = pendingPlaySpeech else {
             hasPendingBubble = false
             pendingBubbleText = nil
+            pendingPlaySpeech = nil
             return
         }
 
         hasPendingBubble = false
         pendingBubbleText = nil
+        pendingPlaySpeech = nil
 
         // 再次检查当前气泡是否已经消失
         if shouldShowBubble {
@@ -307,6 +318,7 @@ class SelfTalkManager: ObservableObject {
                     print("🧠 SelfTalkManager: Still waiting for current bubble, remaining: \(Int(remainingDelay))s")
                     hasPendingBubble = true
                     pendingBubbleText = text
+                    pendingPlaySpeech = playSpeech
                     DispatchQueue.main.asyncAfter(deadline: .now() + remainingDelay) {
                         self.showPendingBubble()
                     }
@@ -315,14 +327,25 @@ class SelfTalkManager: ObservableObject {
             }
         }
 
-        showBubbleInternal(text: text)
+        showBubbleInternal(text: text, playSpeech: playSpeech)
     }
 
     /// Internal method to show bubble (no delay checks)
-    private func showBubbleInternal(text: String) {
+    /// - Parameters:
+    ///   - text: 气泡文本
+    ///   - playSpeech: 是否播放语音（LLM生成时为true，fallback时为false）
+    private func showBubbleInternal(text: String, playSpeech: Bool = true) {
+        NSLog("🔴🔴🔴 showBubbleInternal - text: '\(text)', playSpeech: \(playSpeech)")
         bubbleText = text
         shouldShowBubble = true
         bubbleDisplayStartTime = Date()  // 记录显示开始时间
+
+        // 触发语音播放（如果启用且是LLM生成的内容）
+        if playSpeech {
+            triggerSpeechIfEnabled(text: text)
+        } else {
+            print("🧠 SelfTalkManager: Skipping speech - fallback/preset text")
+        }
 
         // US-007: 记录气泡显示
         let bubbleType = CommentGenerator.shared.currentComment.isEmpty ? "gentleTease" : "general"
@@ -332,12 +355,64 @@ class SelfTalkManager: ObservableObject {
         // 不再设置外部自动隐藏时间，让气泡视图的流式动画自己控制消失
     }
 
+    /// 触发语音播放（如果配置启用）
+    private func triggerSpeechIfEnabled(text: String) {
+        let config = AppConfigManager.shared.config
+        NSLog("🔴🔴🔴 triggerSpeechIfEnabled called - text: '\(text)'")
+        NSLog("🔴🔴🔴 config exists: \(config != nil)")
+        if let config = config {
+            NSLog("🔴🔴🔴 speechConfig.enabled: \(config.speechConfig.enabled)")
+            NSLog("🔴🔴🔴 speechConfig.bubbleSpeechEnabled: \(config.speechConfig.bubbleSpeechEnabled)")
+            NSLog("🔴🔴🔴 speechConfig.voice: \(config.speechConfig.voice)")
+            NSLog("🔴🔴🔴 speechConfig.ttsApiKey: \(config.speechConfig.ttsApiKey.isEmpty ? "empty" : "has value")")
+        }
+
+        guard let config = config,
+              config.speechConfig.enabled,
+              config.speechConfig.bubbleSpeechEnabled else {
+            NSLog("🔴🔴🔴 Speech NOT triggered - config check failed")
+            return
+        }
+
+        // 如果正在播放或正在缓冲，不播放新语音（避免打断）
+        guard !SpeechService.shared.isSpeaking && !SpeechService.shared.isBuffering else {
+            print("🔊 SelfTalkManager: Skipping speech - already playing/buffering")
+            return
+        }
+
+        print("🔊 SelfTalkManager: Triggering speech for bubble")
+
+        SpeechService.shared.speak(
+            text: text,
+            voice: SpeechService.CosyVoice(rawValue: config.speechConfig.voice),
+            speed: SpeechService.TTSSpeed(rawValue: config.speechConfig.speed),
+            model: SpeechService.TTSModel(rawValue: config.speechConfig.model),
+            completion: { result in
+                switch result {
+                case .success:
+                    print("🔊 SelfTalkManager: Speech completed")
+                case .failure(let error):
+                    print("🔊 SelfTalkManager: Speech failed - \(error.errorDescription ?? "unknown")")
+                }
+            }
+        )
+    }
+
     /// Hide bubble
-    func hideBubble() {
-        print("🟣 SelfTalkManager.hideBubble() called - hiding bubble")
+    /// - Parameter stopSpeech: 是否停止语音播放（默认true，气泡自然消失时设为false）
+    func hideBubble(stopSpeech: Bool = true) {
+        print("🟣 SelfTalkManager.hideBubble() called - hiding bubble, stopSpeech: \(stopSpeech)")
         shouldShowBubble = false
         bubbleText = ""
         bubbleDisplayStartTime = nil  // 清除显示开始时间
+
+        // 停止语音播放（只有用户主动关闭时才停止，气泡自然消失时让语音播放完成）
+        if stopSpeech {
+            SpeechService.shared.stopSpeaking()
+            print("🟣 SelfTalkManager: Speech stopped")
+        } else {
+            print("🟣 SelfTalkManager: Letting speech continue playing")
+        }
 
         // 清除待显示的气泡（当前气泡消失时，取消等待中的气泡）
         hasPendingBubble = false
@@ -429,8 +504,10 @@ class SelfTalkManager: ObservableObject {
 
     /// 外部模块显示气泡的统一接口
     /// 不设置自动隐藏时间，让气泡视图自己控制
-    /// - Parameter text: 气泡内容
-    func showExternalBubble(text: String) {
+    /// - Parameters:
+    ///   - text: 气泡内容
+    ///   - playSpeech: 是否播放语音（默认 true）
+    func showExternalBubble(text: String, playSpeech: Bool = true) {
         // 检查当前气泡是否显示足够时间
         if shouldShowBubble {
             if let startTime = bubbleDisplayStartTime {
@@ -442,9 +519,11 @@ class SelfTalkManager: ObservableObject {
                     if hasPendingBubble {
                         print("🧠 SelfTalkManager: Updating pending external bubble content")
                         pendingBubbleText = text
+                        pendingPlaySpeech = playSpeech
                     } else {
                         hasPendingBubble = true
                         pendingBubbleText = text
+                        pendingPlaySpeech = playSpeech
                         // 延迟显示
                         let delay = minBubbleDisplayTime - displayTime
                         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -459,7 +538,8 @@ class SelfTalkManager: ObservableObject {
         // 清除任何待显示的气泡
         hasPendingBubble = false
         pendingBubbleText = nil
+        pendingPlaySpeech = nil
 
-        showBubbleInternal(text: text)
+        showBubbleInternal(text: text, playSpeech: playSpeech)
     }
 }

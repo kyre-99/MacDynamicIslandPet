@@ -165,9 +165,44 @@ class ConversationManager {
         LLMService.shared.sendConversationWithHistory(messages: messages, maxTokens: 300) { result in
             if case .success = result {
                 EvolutionManager.shared.recordConversation()
+
+                // 触发语音播放（如果启用）
+                if case .success(let response) = result {
+                    self.triggerSpeechIfEnabled(text: response)
+                }
             }
             completion(result)
         }
+    }
+
+    /// 触发语音播放（如果配置启用）
+    private func triggerSpeechIfEnabled(text: String) {
+        guard let config = AppConfigManager.shared.config,
+              config.speechConfig.enabled,
+              config.speechConfig.conversationSpeechEnabled else { return }
+
+        // 如果正在播放或正在缓冲，不播放新语音（避免打断）
+        guard !SpeechService.shared.isSpeaking && !SpeechService.shared.isBuffering else {
+            print("🔊 ConversationManager: Skipping speech - already playing/buffering")
+            return
+        }
+
+        print("🔊 ConversationManager: Triggering speech for conversation")
+
+        SpeechService.shared.speak(
+            text: text,
+            voice: SpeechService.CosyVoice(rawValue: config.speechConfig.voice),
+            speed: SpeechService.TTSSpeed(rawValue: config.speechConfig.speed),
+            model: SpeechService.TTSModel(rawValue: config.speechConfig.model),
+            completion: { result in
+                switch result {
+                case .success:
+                    print("🔊 ConversationManager: Speech completed")
+                case .failure(let error):
+                    print("🔊 ConversationManager: Speech failed - \(error.errorDescription ?? "unknown")")
+                }
+            }
+        )
     }
 
     /// 构建完整对话 messages（OpenAI SDK 标准格式）

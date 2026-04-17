@@ -33,6 +33,10 @@ struct AppConfig: Codable {
     /// Array of custom RSS URLs for autonomous thinking
     var customRSSSources: [String]?
 
+    /// Speech synthesis configuration
+    /// Controls TTS voice settings for the girl sprite
+    var speechConfig: SpeechConfig
+
     /// Default configuration with placeholder values
     static let defaultConfig = AppConfig(
         openaiApiKey: "",
@@ -43,7 +47,8 @@ struct AppConfig: Codable {
         memoryRetentionDays: 30,
         personality: PersonalityProfile.defaultProfile,
         newsInterests: ["科技", "娱乐", "游戏"],  // Default: tech, entertainment, games
-        customRSSSources: nil
+        customRSSSources: nil,
+        speechConfig: SpeechConfig.defaultConfig  // 语音配置（女孩精灵默认用龙呼呼音色）
     )
 
     /// Validate the configuration
@@ -53,11 +58,51 @@ struct AppConfig: Codable {
                !modelName.isEmpty &&
                maxTokens > 0 &&
                memoryRetentionDays > 0 &&
-               personality.isValid()
+               personality.isValid() &&
+               speechConfig.isValid()
     }
 
     /// Get vision model name (fallback to modelName if not specified)
     func getVisionModelName() -> String {
         return visionModelName ?? modelName
+    }
+}
+
+// MARK: - Speech Configuration
+
+/// 语音配置结构
+struct SpeechConfig: Codable {
+    var enabled: Bool                    // 总开关
+    var bubbleSpeechEnabled: Bool        // 气泡语音开关
+    var conversationSpeechEnabled: Bool  // 对话窗口语音开关
+    var voice: String                    // 音色（默认龙呼呼 - 天真女童）
+    var speed: Int                       // 语速 (50/100/150)
+    var model: String                    // TTS模型
+    var volume: Double                   // 音量 0.0-1.0
+
+    // TTS API 配置（独立于 LLM API）
+    var ttsApiKey: String                // TTS API Key（阿里云 DashScope）
+    var ttsApiBaseUrl: String            // TTS API 地址
+
+    /// 默认配置 - 精灵是女孩，使用龙呼呼音色（天真女童，需要 _v3 后缀）
+    static let defaultConfig = SpeechConfig(
+        enabled: false,
+        bubbleSpeechEnabled: true,
+        conversationSpeechEnabled: false,
+        voice: "longhuhu_v3",       // 龙呼呼 - 天真女童（需要 _v3 后缀）
+        speed: 100,
+        model: "cosyvoice-v3-flash",
+        volume: 0.8,
+        ttsApiKey: "",
+        ttsApiBaseUrl: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
+    )
+
+    func isValid() -> Bool {
+        return volume >= 0 && volume <= 1 && speed > 0 && speed <= 200
+    }
+
+    /// 检查 TTS 是否已配置（有 API Key）
+    func isTTSConfigured() -> Bool {
+        return !ttsApiKey.isEmpty
     }
 }

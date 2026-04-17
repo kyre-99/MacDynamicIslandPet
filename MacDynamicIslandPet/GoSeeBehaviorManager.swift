@@ -238,17 +238,15 @@ class GoSeeBehaviorManager: ObservableObject {
             petReaction: comment
         )
 
-        // Show bubble via SelfTalkManager (emotion will be set by AppDelegate)
-        DispatchQueue.main.async { [weak self] in
-            print("🟣 GoSeeBehaviorManager: Setting bubbleText='\(comment)', shouldShowBubble=true")
-            self?.selfTalkManager.bubbleText = comment
-            self?.selfTalkManager.shouldShowBubble = true
-        }
+        // Show bubble via SelfTalkManager (使用统一接口，会触发语音)
+        // playSpeech: true 表示这是 LLM 生成的气泡，需要播放语音
+        selfTalkManager.showExternalBubble(text: comment, playSpeech: true)
 
         // 备用清理：15秒后清理状态（气泡视图自己控制消失，这里是备用）
+        // 不停止语音，让长语音播放完成
         DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { [weak self] in
             print("🟣 GoSeeBehaviorManager: Cleanup after go-see")
-            self?.selfTalkManager.hideBubble()
+            self?.selfTalkManager.hideBubble(stopSpeech: false)
             self?.isGoSeeInProgress = false
             self?.targetWindowPosition = nil
             self?.lastGoSeeTime = Date()
@@ -285,11 +283,11 @@ class GoSeeBehaviorManager: ObservableObject {
             petReaction: fallbackComment
         )
 
-        selfTalkManager.bubbleText = fallbackComment
-        selfTalkManager.shouldShowBubble = true
+        // 使用统一接口显示气泡，playSpeech: false 表示预设内容不播放语音
+        selfTalkManager.showExternalBubble(text: fallbackComment, playSpeech: false)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-            self?.selfTalkManager.hideBubble()
+            self?.selfTalkManager.hideBubble(stopSpeech: false)  // fallback不播放语音，但保持一致性
             self?.isGoSeeInProgress = false
             self?.targetWindowPosition = nil
         }

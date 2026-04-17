@@ -1087,6 +1087,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = CommentGenerator.shared
         print("🟣 CommentGenerator initialized")
 
+        // Initialize SpeechService - TTS语音服务
+        _ = SpeechService.shared
+        print("🟣 SpeechService initialized - TTS ready")
+
         // Initialize GoSeeBehaviorManager (US-008) - handles go-see behavior on app switch
         // 暂时注释掉，避免辅助功能权限弹窗
         // _ = GoSeeBehaviorManager.shared
@@ -1204,9 +1208,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             onDisappear: { [weak self] in
-                print("🔵 SelfTalkBubbleView onDisappear callback triggered")
+                print("🔵 SelfTalkBubbleView onDisappear callback triggered (animation finished)")
                 self?.selfTalkBubbleWindow?.orderOut(nil)
-                self?.selfTalkManager?.hideBubble()
+                // 气泡动画自然结束，不停止语音，让长语音播放完成
+                self?.selfTalkManager?.hideBubble(stopSpeech: false)
             }
         )
 

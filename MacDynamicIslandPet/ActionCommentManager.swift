@@ -756,8 +756,8 @@ class ActionCommentManager {
 
         print("ActionComment: 拍拍触发吐槽: '\(comment)'")
 
-        // 使用统一接口显示气泡，不设置自定义隐藏时间
-        selfTalkManager.showExternalBubble(text: comment)
+        // 使用统一接口显示气泡，playSpeech: false 表示预设内容不播放语音
+        selfTalkManager.showExternalBubble(text: comment, playSpeech: false)
 
         lastPatTriggerTime = Date()
 
@@ -767,14 +767,13 @@ class ActionCommentManager {
     // MARK: - 显示吐槽
 
     private func showActionComment(_ comment: String, action: AnimationState) {
-        // 使用统一接口显示气泡，不设置自定义隐藏时间
-        // 让气泡视图的流式动画自己控制消失
-        selfTalkManager.showExternalBubble(text: comment)
+        // 使用统一接口显示气泡，playSpeech: false 表示预设内容不播放语音
+        selfTalkManager.showExternalBubble(text: comment, playSpeech: false)
     }
 
     private func showActionComment(_ comment: String, task: PetTask) {
-        // 使用统一接口显示气泡，不设置自定义隐藏时间
-        selfTalkManager.showExternalBubble(text: comment)
+        // 使用统一接口显示气泡，playSpeech: false 表示预设内容不播放语音
+        selfTalkManager.showExternalBubble(text: comment, playSpeech: false)
     }
 
     // MARK: - 统计接口

@@ -292,8 +292,8 @@ class PetViewModel: ObservableObject {
 
         let comment = boredComments.randomElement() ?? "好无聊呀~"
 
-        // 使用统一接口显示气泡，不设置自定义隐藏时间
-        SelfTalkManager.shared.showExternalBubble(text: comment)
+        // 使用统一接口显示气泡，预设内容不播放语音
+        SelfTalkManager.shared.showExternalBubble(text: comment, playSpeech: false)
 
         // 记录到感知记忆
         PerceptionMemoryManager.shared.savePerception(

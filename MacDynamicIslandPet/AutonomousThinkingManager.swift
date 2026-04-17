@@ -259,15 +259,16 @@ class AutonomousThinkingManager {
                     news: selectedNews
                 ) { opinionResult in
                     switch opinionResult {
-                    case .success(let thought):
+                    case .success(let (thought, isLLMGenerated)):
                         // 5. 保存思考记录
                         self.saveThought(thought)
 
                         // 6. 触发观点气泡（30%概率）
-                        self.triggerOpinionBubble(thought)
+                        // isLLMGenerated: true 播放语音，false 不播放（使用 fallback）
+                        self.triggerOpinionBubble(thought, playSpeech: isLLMGenerated)
 
                         self.isThinking = false
-                        print("🧠 AutonomousThinkingManager: Thinking complete - \(thought.spriteOpinion)")
+                        print("🧠 AutonomousThinkingManager: Thinking complete - \(thought.spriteOpinion), isLLMGenerated: \(isLLMGenerated)")
 
                     case .failure(let error):
                         print("🧠 AutonomousThinkingManager: Opinion generation failed - \(error.localizedDescription)")
@@ -316,11 +317,11 @@ class AutonomousThinkingManager {
     /// - Parameters:
     ///   - category: 新闻领域
     ///   - news: 新闻条目
-    ///   - completion: 完成回调
+    ///   - completion: 完成回调，返回 (thought, isLLMGenerated)
     private func generateSpriteOpinion(
         category: NewsCategory,
         news: NewsItem,
-        completion: @escaping (Result<AutonomousThought, LLMError>) -> Void
+        completion: @escaping (Result<(AutonomousThought, Bool), LLMError>) -> Void
     ) {
         // 获取性格参数
         let personality = PersonalityManager.shared.currentProfile
@@ -379,10 +380,10 @@ class AutonomousThinkingManager {
                     influences: influences
                 )
 
-                completion(.success(thought))
+                completion(.success((thought, true)))  // LLM 成功生成
 
             case .failure:
-                // 使用fallback观点
+                // 使用fallback观点，标记为非 LLM 生成
                 let fallbackOpinion = self.fallbackOpinion(category: category)
                 let thought = AutonomousThought.create(
                     category: category,
@@ -392,7 +393,7 @@ class AutonomousThinkingManager {
                     influences: ["LLM失败→使用fallback"]
                 )
 
-                completion(.success(thought))
+                completion(.success((thought, false)))  // 使用 fallback
             }
         }
     }
@@ -413,9 +414,11 @@ class AutonomousThinkingManager {
     // MARK: - Opinion Bubble Trigger
 
     /// 触发观点气泡（100%概率显示完整内容）
-    /// - Parameter thought: 自主思考记录
-    private func triggerOpinionBubble(_ thought: AutonomousThought) {
-        print("🟣 [US-010] triggerOpinionBubble - 触发观点气泡")
+    /// - Parameters:
+    ///   - thought: 自主思考记录
+    ///   - playSpeech: 是否播放语音（LLM生成时为true，fallback时为false）
+    private func triggerOpinionBubble(_ thought: AutonomousThought, playSpeech: Bool = true) {
+        print("🟣 [US-010] triggerOpinionBubble - 触发观点气泡, playSpeech: \(playSpeech)")
 
         // 直接使用完整观点，不截断
         let bubbleText = thought.spriteOpinion
@@ -423,9 +426,9 @@ class AutonomousThinkingManager {
         print("🟣 [US-010] ✅ 触发观点气泡: \(bubbleText)")
 
         DispatchQueue.main.async {
-            // 使用统一接口显示气泡，不设置自定义隐藏时间
-            // 让气泡视图的流式动画自己控制消失（长内容会停留更久）
-            SelfTalkManager.shared.showExternalBubble(text: bubbleText)
+            // 使用统一接口显示气泡
+            // playSpeech: true 播放语音（LLM生成），false 不播放（fallback）
+            SelfTalkManager.shared.showExternalBubble(text: bubbleText, playSpeech: playSpeech)
 
             // 记录气泡显示
             SelfTalkManager.shared.recordBubbleDisplay(bubbleType: "opinion", content: bubbleText)
